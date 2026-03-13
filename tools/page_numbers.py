@@ -16,9 +16,13 @@ class PageNumbersTool(PDFTool):
         if not files:
             return {"error": "Envie um arquivo PDF."}
 
-        position = options.get("position", "bottom-center")  # top/bottom + left/center/right
-        start    = int(options.get("start", 1))
-        fmt      = options.get("format", "n")   # "n" = "1", "page_n" = "Página 1", "n_total" = "1 / 10"
+        position  = options.get("position", "bottom-center")
+        start     = int(options.get("start", 1))
+        fmt       = options.get("format", "n")
+        font_size = int(options.get("font_size", 14))
+
+        # Clamp font size to a safe range
+        font_size = max(6, min(font_size, 72))
 
         reader = PdfReader(files[0])
         total  = len(reader.pages)
@@ -37,17 +41,18 @@ class PageNumbersTool(PDFTool):
             else:
                 label = str(num)
 
-            # Build number overlay
             num_buf = BytesIO()
             c = canvas.Canvas(num_buf, pagesize=(pw, ph))
-            c.setFont("Helvetica", 10)
+            c.setFont("Helvetica", font_size)
             c.setFillColorRGB(0.3, 0.3, 0.3)
 
-            margin = 24
+            # Margin scales slightly with font size so it never clips
+            margin = font_size * 2
+
             if "bottom" in position:
                 y = margin
             else:
-                y = ph - margin - 10
+                y = ph - margin - font_size
 
             if "left" in position:
                 c.drawString(margin, y, label)
