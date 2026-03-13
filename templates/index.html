@@ -673,6 +673,82 @@
           <label>Páginas (ex: 1-3, 5, 7-9)</label>
           <input type="text" name="pages" placeholder="1-3, 5, 7-9" />
         </div>`,
+      "remove-pages": `
+        <label>Páginas a remover (ex: 1, 3-5, 7)</label>
+        <input type="text" name="pages" placeholder="ex: 1, 3-5, 7" />`,
+      "extract-pages": `
+        <label>Páginas a extrair (ex: 1, 3-5, 7)</label>
+        <input type="text" name="pages" placeholder="ex: 1, 3-5, 7" />`,
+      "organize-pages": `
+        <label>Nova ordem das páginas (ex: 3, 1, 2)</label>
+        <input type="text" name="order" placeholder="ex: 3, 1, 2" />
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:8px">
+          Liste todos os números de página na ordem desejada, separados por vírgula.
+        </p>`,
+      "protect": `
+        <label>Senha</label>
+        <input type="password" name="password" placeholder="Digite uma senha..." />
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:8px">Mínimo 4 caracteres.</p>`,
+      "unlock": `
+        <label>Senha do PDF</label>
+        <input type="password" name="password" placeholder="Digite a senha do PDF..." />`,
+      "watermark": `
+        <label>Texto da marca d'água</label>
+        <input type="text" name="text" placeholder="ex: CONFIDENCIAL" />
+        <div style="margin-top:12px">
+          <label>Posição</label>
+          <select name="position">
+            <option value="diagonal">Diagonal (centro)</option>
+            <option value="center">Centralizado</option>
+          </select>
+        </div>
+        <div style="margin-top:12px">
+          <label>Opacidade</label>
+          <select name="opacity">
+            <option value="0.10">Leve (10%)</option>
+            <option value="0.20" selected>Média (20%)</option>
+            <option value="0.40">Forte (40%)</option>
+          </select>
+        </div>`,
+      "page-numbers": `
+        <label>Posição</label>
+        <select name="position">
+          <option value="bottom-center">Rodapé — Centro</option>
+          <option value="bottom-right">Rodapé — Direita</option>
+          <option value="bottom-left">Rodapé — Esquerda</option>
+          <option value="top-center">Cabeçalho — Centro</option>
+          <option value="top-right">Cabeçalho — Direita</option>
+          <option value="top-left">Cabeçalho — Esquerda</option>
+        </select>
+        <div style="margin-top:12px">
+          <label>Formato</label>
+          <select name="format">
+            <option value="n">Número simples (1, 2, 3...)</option>
+            <option value="page_n">Página N (Página 1, Página 2...)</option>
+            <option value="n_total">N de Total (1 / 10, 2 / 10...)</option>
+          </select>
+        </div>
+        <div style="margin-top:12px">
+          <label>Número inicial</label>
+          <input type="text" name="start" placeholder="1" value="1" />
+        </div>`,
+      "compress": `
+        <label>Nível de compressão</label>
+        <select name="level">
+          <option value="low">Baixo — menor alteração na qualidade</option>
+          <option value="medium" selected>Médio — equilíbrio recomendado</option>
+          <option value="high">Alto — maior redução de tamanho</option>
+        </select>`,
+      "pdf-to-jpg": `
+        <label>Qualidade (DPI)</label>
+        <select name="dpi">
+          <option value="96">Baixa (96 DPI) — arquivo menor</option>
+          <option value="150" selected>Média (150 DPI) — recomendado</option>
+          <option value="300">Alta (300 DPI) — melhor qualidade</option>
+        </select>
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:8px">
+          PDFs com múltiplas páginas serão entregues em um arquivo .zip.
+        </p>`,
     };
 
     function toggleRangeInput(el) {

@@ -1,28 +1,33 @@
-"""
-Tool registry — add new tools here!
+from .merge          import MergeTool
+from .split          import SplitTool
+from .rotate         import RotateTool
+from .extract_text   import ExtractTextTool
+from .images_to_pdf  import ImagesToPdfTool
+from .remove_pages   import RemovePagesTool
+from .extract_pages  import ExtractPagesTool
+from .organize_pages import OrganizePagesTool
+from .protect        import ProtectTool
+from .unlock         import UnlockTool
+from .watermark      import WatermarkTool
+from .page_numbers   import PageNumbersTool
+from .compress       import CompressTool
+from .pdf_to_jpg     import PdfToJpgTool
 
-To add a new tool:
-1. Create a new file in tools/ (e.g. tools/watermark.py)
-2. Subclass PDFTool and implement `process()`
-3. Import and add it to the TOOLS list below
-"""
-
-from .merge import MergeTool
-from .split import SplitTool
-from .rotate import RotateTool
-from .extract_text import ExtractTextTool
-from .images_to_pdf import ImagesToPdfTool
-
-# ============================================================
-# REGISTRY — list all available tools here
-# ============================================================
 TOOLS: list = [
     MergeTool(),
     SplitTool(),
-    RotateTool(),
-    ExtractTextTool(),
+    RemovePagesTool(),
+    ExtractPagesTool(),
+    OrganizePagesTool(),
     ImagesToPdfTool(),
+    PdfToJpgTool(),
+    RotateTool(),
+    WatermarkTool(),
+    PageNumbersTool(),
+    CompressTool(),
+    ProtectTool(),
+    UnlockTool(),
+    ExtractTextTool(),
 ]
 
-# Build a lookup dict by tool id for fast access
 TOOLS_BY_ID: dict = {tool.id: tool for tool in TOOLS}
