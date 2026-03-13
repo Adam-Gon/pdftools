@@ -1,6 +1,9 @@
-from pypdf import PdfWriter, PdfReader
+from pypdf import PdfWriter
 from io import BytesIO
 from .base import PDFTool
+from .utils import open_pdf
+
+MAX_PASSWORD_LEN = 128
 
 
 class ProtectTool(PDFTool):
@@ -20,8 +23,12 @@ class ProtectTool(PDFTool):
             return {"error": "Informe uma senha."}
         if len(password) < 4:
             return {"error": "A senha deve ter pelo menos 4 caracteres."}
+        if len(password) > MAX_PASSWORD_LEN:
+            return {"error": f"A senha deve ter no máximo {MAX_PASSWORD_LEN} caracteres."}
 
-        reader = PdfReader(files[0])
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
 
         if reader.is_encrypted:
             return {"error": "Este PDF já está protegido por senha."}
@@ -29,7 +36,6 @@ class ProtectTool(PDFTool):
         writer = PdfWriter()
         for page in reader.pages:
             writer.add_page(page)
-
         writer.encrypt(password)
 
         output = BytesIO()

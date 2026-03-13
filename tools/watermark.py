@@ -4,6 +4,9 @@ from reportlab.lib.colors import HexColor
 from io import BytesIO
 import gc
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted
+
+MAX_TEXT_LEN = 80
 
 
 class WatermarkTool(PDFTool):
@@ -15,7 +18,6 @@ class WatermarkTool(PDFTool):
     accept = ".pdf"
 
     def _build_watermark(self, pw, ph, text, opacity, position) -> bytes:
-        """Build a watermark PDF page in memory — reused across all pages."""
         buf = BytesIO()
         c = canvas.Canvas(buf, pagesize=(pw, ph))
         c.setFillColor(HexColor("#000000"), alpha=opacity)
@@ -35,22 +37,42 @@ class WatermarkTool(PDFTool):
         if not files:
             return {"error": "Envie um arquivo PDF."}
 
-        text     = options.get("text", "CONFIDENCIAL").strip() or "CONFIDENCIAL"
-        opacity  = float(options.get("opacity", 0.20))
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
+
+        err = check_encrypted(reader, files[0].filename)
+        if err:
+            return {"error": err}
+
+        text = options.get("text", "CONFIDENCIAL").strip() or "CONFIDENCIAL"
+        if len(text) > MAX_TEXT_LEN:
+            return {"error": f"O texto da marca d'água deve ter no máximo {MAX_TEXT_LEN} caracteres."}
+
+        try:
+            opacity = float(options.get("opacity", 0.20))
+            opacity = max(0.05, min(opacity, 1.0))
+        except (ValueError, TypeError):
+            opacity = 0.20
+
         position = options.get("position", "diagonal")
+        if position not in ("diagonal", "center"):
+            position = "diagonal"
 
-        reader = PdfReader(files[0])
         writer = PdfWriter()
-
-        # Cache watermarks by page size — avoids rebuilding for same-size pages
         wm_cache: dict = {}
 
         for page in reader.pages:
             box = page.mediabox
             pw  = float(box.width)
             ph  = float(box.height)
-            key = (round(pw), round(ph))
 
+            # Guard against degenerate zero-dimension pages
+            if pw <= 0 or ph <= 0:
+                writer.add_page(page)
+                continue
+
+            key = (round(pw), round(ph))
             if key not in wm_cache:
                 wm_cache[key] = self._build_watermark(pw, ph, text, opacity, position)
 

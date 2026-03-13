@@ -2,5 +2,5 @@ services:
   - type: web
     name: pdftools
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: apt-get install -y poppler-utils && pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --max-requests 1000 --max-requests-jitter 100

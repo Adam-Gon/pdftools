@@ -2,8 +2,9 @@ from io import BytesIO
 import zipfile
 import gc
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted
 
-MAX_PAGES = 40  # Safety limit for free tier RAM
+MAX_PAGES = 30  # Conservative limit: 30 pages * ~2s each = ~60s, safe under 120s timeout
 
 
 class PdfToJpgTool(PDFTool):
@@ -27,25 +28,27 @@ class PdfToJpgTool(PDFTool):
             dpi = int(options.get("dpi", 150))
         except ValueError:
             dpi = 150
+        dpi = max(72, min(dpi, 200))
 
-        dpi = max(72, min(dpi, 200))  # Cap at 200 DPI on free tier (300 crashes)
+        # Validate PDF first
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
 
-        pdf_bytes = files[0].read()
+        err = check_encrypted(reader, files[0].filename)
+        if err:
+            return {"error": err}
 
-        # Check page count before converting
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(BytesIO(pdf_bytes))
-            total_pages = len(reader.pages)
-            del reader
-            gc.collect()
-        except Exception:
-            total_pages = 999
-
+        total_pages = len(reader.pages)
         if total_pages > MAX_PAGES:
-            return {"error": f"Este PDF tem {total_pages} páginas. O limite é {MAX_PAGES} páginas por conversão para evitar sobrecarga do servidor."}
+            return {"error": f"Este PDF tem {total_pages} páginas. O limite é {MAX_PAGES} páginas por conversão."}
 
-        # Convert page by page to keep memory low
+        # Read bytes AFTER validation, then delete reader to free memory
+        files[0].seek(0)
+        pdf_bytes = files[0].read()
+        del reader
+        gc.collect()
+
         try:
             zip_buf = BytesIO()
             with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -62,9 +65,12 @@ class PdfToJpgTool(PDFTool):
                     del images, img_buf
                     gc.collect()
 
+            # Free pdf_bytes after all pages processed
+            del pdf_bytes
+            gc.collect()
+
             zip_buf.seek(0)
 
-            # If single page, return JPG directly instead of ZIP
             if total_pages == 1:
                 with zipfile.ZipFile(BytesIO(zip_buf.getvalue())) as zf:
                     jpg_bytes = zf.read("pagina_1.jpg")

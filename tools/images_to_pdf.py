@@ -6,8 +6,7 @@ from reportlab.lib.utils import ImageReader
 import gc
 from .base import PDFTool
 
-# Max dimension in pixels before resizing — prevents huge RAW/DSLR images crashing the server
-MAX_DIMENSION = 4000
+MAX_DIMENSION = 4000  # Max px per side before resizing
 
 
 class ImagesToPdfTool(PDFTool):
@@ -24,6 +23,8 @@ class ImagesToPdfTool(PDFTool):
 
         page_size = options.get("page_size", "auto")
         fit       = options.get("fit", "fit")
+        if fit not in ("fit", "fill", "original"):
+            fit = "fit"
 
         output = BytesIO()
         pdf = canvas.Canvas(output)
@@ -31,6 +32,7 @@ class ImagesToPdfTool(PDFTool):
         for f in files:
             try:
                 img = Image.open(f)
+                img.load()  # Force full decode to catch corrupt files early
             except Exception:
                 return {"error": f"Não foi possível abrir '{f.filename}'. Envie apenas imagens válidas."}
 
@@ -44,11 +46,14 @@ class ImagesToPdfTool(PDFTool):
             elif img.mode != "RGB":
                 img = img.convert("RGB")
 
-            # Resize if image is too large to prevent RAM spike
+            # Resize oversized images
             w, h = img.size
+            if w <= 0 or h <= 0:
+                return {"error": f"'{f.filename}' tem dimensões inválidas."}
+
             if max(w, h) > MAX_DIMENSION:
                 scale = MAX_DIMENSION / max(w, h)
-                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+                img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
 
             img_w, img_h = img.size
 
@@ -59,13 +64,16 @@ class ImagesToPdfTool(PDFTool):
                 dpi = img.info.get("dpi", (96, 96))
                 if isinstance(dpi, (int, float)):
                     dpi = (dpi, dpi)
-                dpi_x, dpi_y = dpi if dpi[0] > 0 else (96, 96)
+                dpi_x, dpi_y = dpi if (isinstance(dpi, tuple) and dpi[0] > 0) else (96, 96)
                 page_w = img_w / dpi_x * 72
                 page_h = img_h / dpi_y * 72
 
+            # Guard against zero page dimensions
+            if page_w <= 0 or page_h <= 0:
+                page_w, page_h = A4
+
             pdf.setPageSize((page_w, page_h))
 
-            # Draw position
             if fit == "fill":
                 draw_w, draw_h = page_w, page_h
                 x, y = 0, 0
@@ -84,7 +92,6 @@ class ImagesToPdfTool(PDFTool):
                           preserveAspectRatio=(fit == "fit"))
             pdf.showPage()
 
-            # Free image from memory before loading the next one
             del img, img_buffer
             gc.collect()
 

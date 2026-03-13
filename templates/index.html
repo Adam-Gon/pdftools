@@ -772,6 +772,16 @@
     const LIMIT_B   = LIMIT_MB * 1024 * 1024;
     let currentTool = null;
 
+    // Sanitize any user-controlled string before injecting into innerHTML
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     function totalSize() {
       return selectedFiles.reduce((sum, f) => sum + f.size, 0);
     }
@@ -834,7 +844,11 @@
       document.body.style.overflow = "hidden";
     }
 
+    let isProcessing = false;
+    let fetchController = null;
+
     function closeModal() {
+      if (isProcessing) return; // Block close while processing
       document.getElementById("modalOverlay").classList.remove("open");
       document.body.style.overflow = "";
       currentTool = null;
@@ -909,7 +923,7 @@
               <span class="pdf-item-handle">⠿</span>
               <span class="pdf-item-num">${i + 1}</span>
               <div class="pdf-item-info">
-                <div class="pdf-item-name">📄 ${f.name}</div>
+                <div class="pdf-item-name">📄 ${escapeHtml(f.name)}</div>
                 <div class="pdf-item-size">${fmtSize(f.size)}</div>
               </div>
               <button class="pdf-item-remove" onclick="removeFile(${i})" title="Remover">✕</button>
@@ -930,7 +944,7 @@
           const url = URL.createObjectURL(f);
           html += `
             <div class="image-thumb" draggable="true" data-idx="${i}">
-              <img src="${url}" alt="${f.name}" onload="URL.revokeObjectURL(this.src)" />
+              <img src="${url}" alt="${escapeHtml(f.name)}" onload="URL.revokeObjectURL(this.src)" onerror="URL.revokeObjectURL(this.src)" />
               <span class="thumb-num">${i + 1}</span>
               <button class="thumb-remove" onclick="removeFile(${i})" title="Remover">✕</button>
               <button class="thumb-preview" onclick="openLightbox(${i})" title="Visualizar">⤢</button>
@@ -946,7 +960,7 @@
 
       // ── Default: simple pill list ──
       container.innerHTML = selectedFiles.map(f =>
-        `<span class="file-pill">📄 ${f.name}</span>`
+        `<span class="file-pill">📄 ${escapeHtml(f.name)}</span>`
       ).join("");
     }
 
@@ -1084,7 +1098,7 @@
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url; a.download = filename; a.click();
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
           setStatus("✓ Download iniciado!", "success");
         }
       } catch (err) {
@@ -1122,6 +1136,7 @@
       const f = selectedFiles[lightboxIdx];
       const url = URL.createObjectURL(f);
       lightboxImg.onload = () => URL.revokeObjectURL(url);
+      lightboxImg.onerror = () => URL.revokeObjectURL(url);
       lightboxImg.src = url;
       lightboxImg.alt = f.name;
       lightboxName.textContent = f.name;

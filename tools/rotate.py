@@ -1,6 +1,7 @@
-from pypdf import PdfWriter, PdfReader
+from pypdf import PdfWriter
 from io import BytesIO
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted
 
 
 class RotateTool(PDFTool):
@@ -15,6 +16,14 @@ class RotateTool(PDFTool):
         if not files:
             return {"error": "Envie um arquivo PDF."}
 
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
+
+        err = check_encrypted(reader, files[0].filename)
+        if err:
+            return {"error": err}
+
         try:
             degrees = int(options.get("degrees", 90))
         except ValueError:
@@ -23,7 +32,6 @@ class RotateTool(PDFTool):
         if degrees not in (90, 180, 270):
             return {"error": "Ângulo deve ser 90, 180 ou 270."}
 
-        reader = PdfReader(files[0])
         writer = PdfWriter()
         for page in reader.pages:
             page.rotate(degrees)

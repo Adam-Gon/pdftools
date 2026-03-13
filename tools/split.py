@@ -1,7 +1,11 @@
-from pypdf import PdfWriter, PdfReader
+from pypdf import PdfWriter
 from io import BytesIO
 import zipfile
+import gc
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted, parse_page_ranges
+
+MAX_SPLIT_PAGES = 100
 
 
 class SplitTool(PDFTool):
@@ -16,55 +20,40 @@ class SplitTool(PDFTool):
         if not files:
             return {"error": "Envie um arquivo PDF."}
 
-        reader = PdfReader(files[0])
-        total = len(reader.pages)
-        mode = options.get("mode", "all")  # "all" or "range"
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
 
-        # Determine page ranges to extract
+        err = check_encrypted(reader, files[0].filename)
+        if err:
+            return {"error": err}
+
+        total = len(reader.pages)
+        mode  = options.get("mode", "all")
+
         if mode == "range":
             raw = options.get("pages", "").strip()
             if not raw:
                 return {"error": "Informe o intervalo de páginas (ex: 1-3, 5)."}
-            pages_to_extract = self._parse_ranges(raw, total)
-            if pages_to_extract is None:
-                return {"error": f"Intervalo inválido. O PDF tem {total} páginas."}
+            pages_to_extract, err = parse_page_ranges(raw, total)
+            if err:
+                return {"error": err}
         else:
             pages_to_extract = list(range(total))
 
-        # Build a zip with one PDF per page
+        if len(pages_to_extract) > MAX_SPLIT_PAGES:
+            return {"error": f"Muitas páginas para dividir de uma vez. Limite: {MAX_SPLIT_PAGES} páginas."}
+
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i, page_idx in enumerate(pages_to_extract):
+            for page_idx in pages_to_extract:
                 writer = PdfWriter()
                 writer.add_page(reader.pages[page_idx])
                 pdf_buffer = BytesIO()
                 writer.write(pdf_buffer)
                 zf.writestr(f"pagina_{page_idx + 1}.pdf", pdf_buffer.getvalue())
+                del writer, pdf_buffer
+                gc.collect()
 
         zip_buffer.seek(0)
-        return {
-            "file": zip_buffer.read(),
-            "filename": "paginas.zip",
-            "mimetype": "application/zip",
-        }
-
-    def _parse_ranges(self, raw: str, total: int):
-        """Parse '1-3, 5, 7-9' into 0-indexed page indices."""
-        indices = set()
-        try:
-            for part in raw.split(","):
-                part = part.strip()
-                if "-" in part:
-                    start, end = part.split("-")
-                    start, end = int(start), int(end)
-                    if start < 1 or end > total or start > end:
-                        return None
-                    indices.update(range(start - 1, end))
-                else:
-                    p = int(part)
-                    if p < 1 or p > total:
-                        return None
-                    indices.add(p - 1)
-        except (ValueError, TypeError):
-            return None
-        return sorted(indices)
+        return {"file": zip_buffer.read(), "filename": "paginas.zip", "mimetype": "application/zip"}

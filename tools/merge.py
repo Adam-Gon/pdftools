@@ -1,9 +1,10 @@
-from pypdf import PdfWriter, PdfReader
+from pypdf import PdfWriter
 from io import BytesIO
 import gc
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted
 
-MAX_TOTAL_PAGES = 300  # Safety limit to avoid RAM exhaustion
+MAX_TOTAL_PAGES = 300
 
 
 class MergeTool(PDFTool):
@@ -22,10 +23,13 @@ class MergeTool(PDFTool):
         total_pages = 0
 
         for f in files:
-            try:
-                reader = PdfReader(f)
-            except Exception:
-                return {"error": f"Não foi possível ler '{f.filename}'. Certifique-se de enviar PDFs válidos."}
+            reader, err = open_pdf(f)
+            if err:
+                return {"error": err}
+
+            err = check_encrypted(reader, f.filename)
+            if err:
+                return {"error": err}
 
             total_pages += len(reader.pages)
             if total_pages > MAX_TOTAL_PAGES:

@@ -3,6 +3,7 @@ from reportlab.pdfgen import canvas
 from io import BytesIO
 import gc
 from .base import PDFTool
+from .utils import open_pdf, check_encrypted
 
 
 class PageNumbersTool(PDFTool):
@@ -17,23 +18,45 @@ class PageNumbersTool(PDFTool):
         if not files:
             return {"error": "Envie um arquivo PDF."}
 
-        position  = options.get("position", "bottom-center")
-        start     = int(options.get("start", 1))
-        fmt       = options.get("format", "n")
-        font_size = int(options.get("font_size", 14))
-        font_size = max(6, min(font_size, 72))
+        reader, err = open_pdf(files[0])
+        if err:
+            return {"error": err}
 
-        reader = PdfReader(files[0])
+        err = check_encrypted(reader, files[0].filename)
+        if err:
+            return {"error": err}
+
+        position = options.get("position", "bottom-center")
+
+        try:
+            start = int(options.get("start", 1))
+            start = max(1, min(start, 9999))
+        except (ValueError, TypeError):
+            start = 1
+
+        fmt = options.get("format", "n")
+        if fmt not in ("n", "page_n", "n_total"):
+            fmt = "n"
+
+        try:
+            font_size = int(options.get("font_size", 14))
+            font_size = max(6, min(font_size, 72))
+        except (ValueError, TypeError):
+            font_size = 14
+
         total  = len(reader.pages)
         writer = PdfWriter()
-
-        # Cache overlays by (page_size, label) to avoid rebuilding identical pages
         overlay_cache: dict = {}
 
         for idx, page in enumerate(reader.pages):
             box = page.mediabox
             pw  = float(box.width)
             ph  = float(box.height)
+
+            # Guard against degenerate zero-dimension pages
+            if pw <= 0 or ph <= 0:
+                writer.add_page(page)
+                continue
 
             num = idx + start
             if fmt == "page_n":
