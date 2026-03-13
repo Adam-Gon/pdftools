@@ -1,6 +1,9 @@
 from io import BytesIO
 import zipfile
+import gc
 from .base import PDFTool
+
+MAX_PAGES = 40  # Safety limit for free tier RAM
 
 
 class PdfToJpgTool(PDFTool):
@@ -25,29 +28,49 @@ class PdfToJpgTool(PDFTool):
         except ValueError:
             dpi = 150
 
-        dpi = max(72, min(dpi, 300))  # clamp between 72 and 300
+        dpi = max(72, min(dpi, 200))  # Cap at 200 DPI on free tier (300 crashes)
 
         pdf_bytes = files[0].read()
 
+        # Check page count before converting
         try:
-            images = convert_from_bytes(pdf_bytes, dpi=dpi)
+            from pypdf import PdfReader
+            reader = PdfReader(BytesIO(pdf_bytes))
+            total_pages = len(reader.pages)
+            del reader
+            gc.collect()
+        except Exception:
+            total_pages = 999
+
+        if total_pages > MAX_PAGES:
+            return {"error": f"Este PDF tem {total_pages} páginas. O limite é {MAX_PAGES} páginas por conversão para evitar sobrecarga do servidor."}
+
+        # Convert page by page to keep memory low
+        try:
+            zip_buf = BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for page_num in range(1, total_pages + 1):
+                    images = convert_from_bytes(
+                        pdf_bytes,
+                        dpi=dpi,
+                        first_page=page_num,
+                        last_page=page_num,
+                    )
+                    img_buf = BytesIO()
+                    images[0].save(img_buf, format="JPEG", quality=85)
+                    zf.writestr(f"pagina_{page_num}.jpg", img_buf.getvalue())
+                    del images, img_buf
+                    gc.collect()
+
+            zip_buf.seek(0)
+
+            # If single page, return JPG directly instead of ZIP
+            if total_pages == 1:
+                with zipfile.ZipFile(BytesIO(zip_buf.getvalue())) as zf:
+                    jpg_bytes = zf.read("pagina_1.jpg")
+                return {"file": jpg_bytes, "filename": "pagina_1.jpg", "mimetype": "image/jpeg"}
+
+            return {"file": zip_buf.read(), "filename": "paginas.zip", "mimetype": "application/zip"}
+
         except Exception as e:
             return {"error": f"Erro ao converter o PDF: {str(e)}"}
-
-        if len(images) == 1:
-            # Single page — return JPG directly
-            buf = BytesIO()
-            images[0].save(buf, format="JPEG", quality=90)
-            buf.seek(0)
-            return {"file": buf.read(), "filename": "pagina_1.jpg", "mimetype": "image/jpeg"}
-
-        # Multiple pages — return ZIP
-        zip_buf = BytesIO()
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i, img in enumerate(images):
-                img_buf = BytesIO()
-                img.save(img_buf, format="JPEG", quality=90)
-                zf.writestr(f"pagina_{i + 1}.jpg", img_buf.getvalue())
-
-        zip_buf.seek(0)
-        return {"file": zip_buf.read(), "filename": "paginas.zip", "mimetype": "application/zip"}

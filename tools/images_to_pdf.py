@@ -3,7 +3,11 @@ from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
+import gc
 from .base import PDFTool
+
+# Max dimension in pixels before resizing — prevents huge RAW/DSLR images crashing the server
+MAX_DIMENSION = 4000
 
 
 class ImagesToPdfTool(PDFTool):
@@ -18,8 +22,8 @@ class ImagesToPdfTool(PDFTool):
         if not files:
             return {"error": "Envie pelo menos uma imagem."}
 
-        page_size = options.get("page_size", "auto")  # "auto", "a4", "original"
-        fit = options.get("fit", "fit")                # "fit", "fill", "original"
+        page_size = options.get("page_size", "auto")
+        fit       = options.get("fit", "fit")
 
         output = BytesIO()
         pdf = canvas.Canvas(output)
@@ -28,9 +32,9 @@ class ImagesToPdfTool(PDFTool):
             try:
                 img = Image.open(f)
             except Exception:
-                return {"error": f"Não foi possível abrir o arquivo '{f.filename}'. Certifique-se de enviar imagens válidas."}
+                return {"error": f"Não foi possível abrir '{f.filename}'. Envie apenas imagens válidas."}
 
-            # Convert to RGB (remove alpha / palette modes)
+            # Convert color mode
             if img.mode in ("RGBA", "LA", "P"):
                 background = Image.new("RGB", img.size, (255, 255, 255))
                 if img.mode == "P":
@@ -40,13 +44,18 @@ class ImagesToPdfTool(PDFTool):
             elif img.mode != "RGB":
                 img = img.convert("RGB")
 
-            img_w, img_h = img.size  # pixels
+            # Resize if image is too large to prevent RAM spike
+            w, h = img.size
+            if max(w, h) > MAX_DIMENSION:
+                scale = MAX_DIMENSION / max(w, h)
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
-            # Determine page dimensions (points, 1pt = 1/72 inch)
+            img_w, img_h = img.size
+
+            # Page dimensions
             if page_size == "a4":
                 page_w, page_h = A4
             else:
-                # "auto" / "original" — use image dimensions converted to points at 96 dpi
                 dpi = img.info.get("dpi", (96, 96))
                 if isinstance(dpi, (int, float)):
                     dpi = (dpi, dpi)
@@ -56,38 +65,29 @@ class ImagesToPdfTool(PDFTool):
 
             pdf.setPageSize((page_w, page_h))
 
-            # Calculate draw size
-            if fit == "original":
-                draw_w = img_w / 96 * 72
-                draw_h = img_h / 96 * 72
-                x = (page_w - draw_w) / 2
-                y = (page_h - draw_h) / 2
-            elif fit == "fill":
+            # Draw position
+            if fit == "fill":
                 draw_w, draw_h = page_w, page_h
                 x, y = 0, 0
-            else:  # "fit" — keep aspect ratio with padding
+            else:
                 scale = min(page_w / img_w, page_h / img_h)
                 draw_w = img_w * scale
                 draw_h = img_h * scale
                 x = (page_w - draw_w) / 2
                 y = (page_h - draw_h) / 2
 
-            # Save image to temp buffer for reportlab
             img_buffer = BytesIO()
-            img.save(img_buffer, format="JPEG", quality=90)
+            img.save(img_buffer, format="JPEG", quality=88)
             img_buffer.seek(0)
 
-            pdf.drawImage(
-                ImageReader(img_buffer),
-                x, y, width=draw_w, height=draw_h,
-                preserveAspectRatio=(fit == "fit"),
-            )
+            pdf.drawImage(ImageReader(img_buffer), x, y, width=draw_w, height=draw_h,
+                          preserveAspectRatio=(fit == "fit"))
             pdf.showPage()
+
+            # Free image from memory before loading the next one
+            del img, img_buffer
+            gc.collect()
 
         pdf.save()
         output.seek(0)
-        return {
-            "file": output.read(),
-            "filename": "imagens.pdf",
-            "mimetype": "application/pdf",
-        }
+        return {"file": output.read(), "filename": "imagens.pdf", "mimetype": "application/pdf"}
